@@ -3,16 +3,17 @@ package main
 import (
   "flag"
   "fmt"
-  "net/http"
+  "github.com/valyala/fasthttp"
   "strconv"
   "os"
   "github.com/fzzy/radix/redis"
   "time"
 )
 
-var listenPort int
+var listenAddr string
 var redisHost string
 var redisPort string
+var compress bool
 
 func errHndlr(err error) {
   if err != nil {
@@ -22,9 +23,10 @@ func errHndlr(err error) {
 }
 
 func init() {
-  flag.IntVar(&listenPort, "port", 8080, "listen port")
+  flag.StringVar(&listenAddr, "listen", ":9000", "listen address")
   flag.StringVar(&redisHost, "redis_host", "127.0.0.1", "redis host")
   flag.StringVar(&redisPort, "redis_port", "6379", "redis port")
+  flag.BoolVar(&compress, "compress", false, "whether to enable transparent response compression")
   flag.Parse()
 }
 
@@ -48,9 +50,9 @@ func rlookup(k string) map[string]string {
   return myhash
 }
 
-func redirect(w http.ResponseWriter, r *http.Request) {
-  // fmt.Fprintf(os.Stderr,"Req: %s %s\n", r.Host, r.URL.Path)
-  r_rule := rlookup(r.URL.Path)
+func redirectHandler(ctx *fasthttp.RequestCtx) {
+  r_path := string(ctx.Path())
+  r_rule := rlookup(r_path)
   r_target := r_rule["target"]
   r_code := r_rule["code"]
   switch {
@@ -63,13 +65,21 @@ func redirect(w http.ResponseWriter, r *http.Request) {
   }
   r_code_int, err := strconv.Atoi(r_code)
   errHndlr(err)
-  http.Redirect(w, r, r_target, r_code_int)
+  ctx.Redirect(r_target, r_code_int)
 }
 
 func main() {
-  http.HandleFunc("/", redirect)
-  fmt.Println("Listening on port:", strconv.Itoa(listenPort))
+  fmt.Println("Listening on address", listenAddr)
   fmt.Println("Using Redis host", redisHost)
   fmt.Println("Using Redis port", redisPort)
-  http.ListenAndServe(":" + strconv.Itoa(listenPort), nil)
+  fmt.Println("Compression enabled:", compress)
+
+  h := redirectHandler
+  if compress == true {
+    h = fasthttp.CompressHandler(h)
+  }
+
+  if err := fasthttp.ListenAndServe(listenAddr, h); err != nil {
+    fmt.Println("Error in ListenAndServe: %s", err)
+  }
 }

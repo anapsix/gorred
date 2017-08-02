@@ -4,8 +4,10 @@ redirect server in GO, backed by Redis
 ## Usage
 ```
 Usage of ./gorred_osx:
-  -port int
-        listen port (default 8080)
+  -compress
+        whether to enable transparent response compression
+  -listen string
+        listen address (default ":9000")
   -redis_host string
         redis host (default "127.0.0.1")
   -redis_port string
